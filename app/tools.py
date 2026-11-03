@@ -5,10 +5,13 @@
 """
 
 import json
+import random
+from datetime import datetime
 from functools import cache
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+LEARNING_LOG_DIR = Path(__file__).resolve().parent.parent / "learning_log"
 MAX_RESULTS = 3
 
 
@@ -16,6 +19,44 @@ MAX_RESULTS = 3
 def load_glossary() -> list[dict]:
     with open(DATA_DIR / "glossary.json", encoding="utf-8") as f:
         return json.load(f)["terms"]
+
+
+def save_learning_log(entry: str) -> str:
+    """学習の振り返りを学習ログに追記する。
+
+    学習した内容や気づきを保存したいと利用者が依頼したときに使う。
+    保存前に利用者の承認が必要で、記録は日付ごとのファイルに追記する。
+    """
+    entry = entry.strip()
+    if not entry:
+        raise ValueError("保存する学習記録が空です。")
+
+    now = datetime.now().astimezone()
+    LEARNING_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    path = LEARNING_LOG_DIR / f"{now:%Y-%m-%d}.md"
+    with path.open("a", encoding="utf-8") as f:
+        f.write(f"## {now:%H:%M:%S}\n\n{entry}\n\n")
+    return f"学習記録を {path.relative_to(LEARNING_LOG_DIR.parent)} に保存しました。"
+
+
+def make_quiz(lecture: int) -> str:
+    """指定した回の用語を使った確認問題と答えを返す。
+
+    「第2回の確認問題を出して」のように、講座の復習問題を求められたときに使う。
+    用語集から指定回の用語を1つ選び、「○○の意味は？」という問題と定義を返す。
+    """
+    terms = [entry for entry in load_glossary() if entry["lecture"] == lecture]
+    if not terms:
+        return f"第{lecture}回の用語が見つかりませんでした。"
+
+    term = random.choice(terms)
+    return json.dumps(
+        {
+            "question": f"「{term['term']}」の意味は？",
+            "answer": term["definition"],
+        },
+        ensure_ascii=False,
+    )
 
 
 def _normalize(text: str) -> str:

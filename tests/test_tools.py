@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app import tools
 
 
@@ -37,6 +39,41 @@ def test_search_reports_not_found():
 def test_lecture_summary():
     assert "エージェント" in tools.get_lecture_summary(3)
     assert "まだありません" in tools.get_lecture_summary(99)
+
+
+def test_save_learning_log_appends_entry_to_date_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "LEARNING_LOG_DIR", tmp_path / "learning_log")
+
+    result = tools.save_learning_log("  今日学んだこと  ")
+    tools.save_learning_log("次に試したいこと")
+    files = list(tools.LEARNING_LOG_DIR.glob("*.md"))
+
+    assert len(files) == 1
+    contents = files[0].read_text(encoding="utf-8")
+    assert "今日学んだこと" in contents
+    assert "次に試したいこと" in contents
+    assert result.startswith("学習記録を learning_log/")
+
+
+def test_save_learning_log_rejects_empty_entry():
+    with pytest.raises(ValueError, match="学習記録が空"):
+        tools.save_learning_log("   ")
+
+
+def test_make_quiz_uses_a_term_from_the_requested_lecture(monkeypatch):
+    terms = [term for term in tools.load_glossary() if term["lecture"] == 2]
+    monkeypatch.setattr(tools.random, "choice", lambda choices: choices[0])
+
+    quiz = json.loads(tools.make_quiz(2))
+
+    assert quiz == {
+        "question": f"「{terms[0]['term']}」の意味は？",
+        "answer": terms[0]["definition"],
+    }
+
+
+def test_make_quiz_reports_when_lecture_has_no_terms():
+    assert "第99回の用語が見つかりませんでした" in tools.make_quiz(99)
 
 
 def test_default_question_of_lecture1_is_answerable_from_glossary():
